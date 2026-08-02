@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ui_on_surface_variant">#C3CAD1</color>
+    <color name="ui_surface_variant">#263238</color>
+    <color name="ui_outline">#5F6B73</color>
+    <color name="status_success">#81C784</color>
+    <color name="status_warning">#FFB74D</color>
+    <color name="status_error">#EF9A9A</color>
+    <color name="status_neutral">#B0BEC5</color>
+</resources>

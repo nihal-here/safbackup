@@ -12,7 +12,18 @@ import org.robolectric.annotation.Config
 @Config(sdk = [35])
 class LayoutInflationTest {
     @Test
-    fun polishedLayoutsInflateUnderSafBackupTheme() {
+    @Config(qualifiers = "notnight")
+    fun polishedLayoutsInflateUnderSafBackupThemeInLightMode() {
+        inflatePolishedLayouts()
+    }
+
+    @Test
+    @Config(qualifiers = "night")
+    fun polishedLayoutsInflateUnderSafBackupThemeInNightMode() {
+        inflatePolishedLayouts()
+    }
+
+    private fun inflatePolishedLayouts() {
         val context = ContextThemeWrapper(
             ApplicationProvider.getApplicationContext(),
             R.style.Theme_SAFBackup
