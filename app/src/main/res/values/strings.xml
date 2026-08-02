@@ -1,0 +1,31 @@
+<resources>
+    <string name="app_name">SAF Backup</string>
+    <string name="app_description">One-way folder backup using Android\'s folder picker.\nNo All Files Access. No Internet permission.</string>
+
+    <string name="choose_source">Choose source folder</string>
+    <string name="choose_dest">Choose destination folder</string>
+    <string name="wifi_only">Wi-Fi only</string>
+    <string name="charging_only">Only while charging</string>
+    <string name="enable_daily">Enable daily backup</string>
+    <string name="disable_daily">Disable daily backup</string>
+    <string name="backup_now">Back up now</string>
+
+    <string name="not_selected">Not selected</string>
+    <string name="permission_revoked">⚠ Permission revoked — re-select folder</string>
+
+    <string name="status_no_backups">No backups run yet.</string>
+    <string name="status_last_run">Last backup: %1$s</string>
+    <string name="status_copied">Copied: %1$d</string>
+    <string name="status_skipped">Skipped: %1$d</string>
+    <string name="status_failed">Failed: %1$d</string>
+    <string name="status_errors">Errors:</string>
+    <string name="status_running">Backup running…</string>
+    <string name="status_queued">Backup queued.</string>
+    <string name="status_daily_enabled">Daily backup enabled.\nAndroid chooses the exact run time.</string>
+    <string name="status_daily_disabled">Daily backup disabled.</string>
+
+    <string name="error_select_both">Choose both source and destination first.</string>
+    <string name="error_same_folder">Source and destination must be different folders.</string>
+    <string name="error_permissions_revoked">Folder permissions have been revoked.\nRe-select the affected folder.</string>
+    <string name="error_permission_denied">Could not obtain persistent folder access.\nTry selecting the folder again.</string>
+</resources>
