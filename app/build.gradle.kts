@@ -4,6 +4,24 @@ plugins {
     id("kotlin-kapt")
 }
 
+val envVersionName = System.getenv("APP_VERSION_NAME")
+val envVersionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull()
+
+val isCi = System.getenv("CI") == "true" || System.getenv("GITHUB_ACTIONS") == "true"
+val isReleaseTask = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
+
+val finalVersionName = when {
+    !envVersionName.isNullOrEmpty() -> envVersionName
+    isCi && isReleaseTask -> throw GradleException("APP_VERSION_NAME environment variable must be supplied for CI release builds!")
+    else -> "0.2.0-dev"
+}
+
+val finalVersionCode = when {
+    envVersionCode != null && envVersionCode > 0 -> envVersionCode
+    isCi && isReleaseTask -> throw GradleException("APP_VERSION_CODE environment variable must be supplied for CI release builds!")
+    else -> 2000
+}
+
 android {
     namespace = "dev.safbackup"
     compileSdk = 35
@@ -12,8 +30,8 @@ android {
         applicationId = "dev.safbackup"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = finalVersionCode
+        versionName = finalVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
