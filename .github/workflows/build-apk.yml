@@ -1,4 +1,4 @@
-name: Build APK
+name: Build Release APK
 
 on:
   push:
@@ -27,14 +27,59 @@ jobs:
           gradle-version: '8.11.1'
           validate-wrappers: false
 
-      - name: Build debug APK
-        run: gradle assembleDebug
+      - name: Validate Secrets & Decode Keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.SAFBACKUP_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.SAFBACKUP_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SAFBACKUP_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.SAFBACKUP_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "::error::Required release signing secrets (SAFBACKUP_KEYSTORE_BASE64, SAFBACKUP_KEYSTORE_PASSWORD, SAFBACKUP_KEY_ALIAS, SAFBACKUP_KEY_PASSWORD) are missing or empty in repository secrets!"
+            exit 1
+          fi
 
-      - name: Upload Artifact
+          KEYSTORE_PATH="${{ runner.temp }}/release.jks"
+          echo "$KEYSTORE_BASE64" | base64 -d > "$KEYSTORE_PATH"
+          if [ ! -s "$KEYSTORE_PATH" ]; then
+            echo "::error::Failed to decode SAFBACKUP_KEYSTORE_BASE64 into valid keystore file!"
+            exit 1
+          fi
+
+      - name: Build Signed Release APK
+        env:
+          KEYSTORE_FILE: ${{ runner.temp }}/release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.SAFBACKUP_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SAFBACKUP_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.SAFBACKUP_KEY_PASSWORD }}
+        run: gradle assembleRelease
+
+      - name: Verify Release APK Signature
+        run: |
+          APK_PATH="app/build/outputs/apk/release/app-release.apk"
+          if [ ! -f "$APK_PATH" ]; then
+            echo "::error::Signed release APK not found at $APK_PATH!"
+            exit 1
+          fi
+
+          APKSIGNER=$(find $ANDROID_HOME/build-tools -name apksigner | sort -V | tail -n 1)
+          if [ -n "$APKSIGNER" ]; then
+            echo "Verifying APK signature with $APKSIGNER..."
+            $APKSIGNER verify --verbose "$APK_PATH"
+          else
+            echo "apksigner not found, checking APK signature files..."
+            unzip -l "$APK_PATH" | grep META-INF
+          fi
+
+      - name: Clean Up Temporary Keystore
+        if: always()
+        run: rm -f "${{ runner.temp }}/release.jks"
+
+      - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: SAFBackup-release-apk
+          path: app/build/outputs/apk/release/app-release.apk
 
       - name: Publish GitHub Release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -42,7 +87,7 @@ jobs:
         with:
           tag_name: v0.2.0
           name: SAF Backup v0.2.0
-          body: "SAF Backup V2 - Automated Release Build"
-          files: app/build/outputs/apk/debug/app-debug.apk
+          body: "SAF Backup V2 - Permanent Signed Release Build"
+          files: app/build/outputs/apk/release/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

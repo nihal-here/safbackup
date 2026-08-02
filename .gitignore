@@ -1,0 +1,15 @@
+*.jks
+*.keystore
+*.p12
+release.jks
+
+# Gradle
+.gradle/
+build/
+app/build/
+.navigation/
+
+# IDE
+.idea/
+*.iml
+.DS_Store
