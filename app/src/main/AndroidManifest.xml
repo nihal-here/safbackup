@@ -1,10 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Intentionally NO INTERNET and NO storage permissions. -->
+
+    <!-- Notification permission for Android 13+ (API 33+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Intentionally NO INTERNET, NO MANAGE_EXTERNAL_STORAGE, and NO storage permissions. -->
+
     <application
         android:allowBackup="false"
         android:label="@string/app_name"
         android:theme="@style/Theme.SAFBackup">
+
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -13,5 +19,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".EditJobActivity"
+            android:exported="false"
+            android:label="@string/title_edit_job" />
     </application>
 </manifest>

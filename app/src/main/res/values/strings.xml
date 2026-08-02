@@ -1,31 +1,69 @@
 <resources>
     <string name="app_name">SAF Backup</string>
-    <string name="app_description">One-way folder backup using Android\'s folder picker.\nNo All Files Access. No Internet permission.</string>
+    <string name="app_description">Safe, one-way folder backup using Storage Access Framework.</string>
+
+    <string name="title_add_job">Add Backup Job</string>
+    <string name="title_edit_job">Edit Backup Job</string>
+
+    <string name="btn_add_job">+ Add Backup Job</string>
+    <string name="btn_backup_all">Back Up All Now</string>
+    <string name="btn_run_now">Back Up Now</string>
+    <string name="btn_edit">Edit</string>
+    <string name="btn_delete">Delete</string>
+    <string name="btn_save">Save</string>
+    <string name="btn_cancel">Cancel</string>
 
     <string name="choose_source">Choose source folder</string>
     <string name="choose_dest">Choose destination folder</string>
+    <string name="not_selected">Not selected</string>
+
+    <string name="label_job_name">Job Name</string>
+    <string name="hint_job_name">e.g. Aegis Backups</string>
+    <string name="opt_recursive">Include subfolders (recursive backup)</string>
     <string name="wifi_only">Wi-Fi only</string>
     <string name="charging_only">Only while charging</string>
-    <string name="enable_daily">Enable daily backup</string>
-    <string name="disable_daily">Disable daily backup</string>
-    <string name="backup_now">Back up now</string>
+    <string name="opt_auto_daily">Automatic daily backup (timing managed by Android)</string>
 
-    <string name="not_selected">Not selected</string>
-    <string name="permission_revoked">⚠ Permission revoked — re-select folder</string>
+    <string name="label_notif_pref">Notifications</string>
+    <string name="notif_pref_failures_only">Failures &amp; conflicts only (Default)</string>
+    <string name="notif_pref_every_backup">Every backup</string>
+    <string name="notif_pref_off">Off</string>
 
-    <string name="status_no_backups">No backups run yet.</string>
-    <string name="status_last_run">Last backup: %1$s</string>
-    <string name="status_copied">Copied: %1$d</string>
-    <string name="status_skipped">Skipped: %1$d</string>
-    <string name="status_failed">Failed: %1$d</string>
-    <string name="status_errors">Errors:</string>
-    <string name="status_running">Backup running…</string>
-    <string name="status_queued">Backup queued.</string>
-    <string name="status_daily_enabled">Daily backup enabled.\nAndroid chooses the exact run time.</string>
-    <string name="status_daily_disabled">Daily backup disabled.</string>
+    <string name="badge_daily_on">Daily: ON</string>
+    <string name="badge_daily_off">Daily: OFF</string>
+    <string name="badge_recursive_on">Recursive: ON</string>
+    <string name="badge_recursive_off">Recursive: OFF</string>
 
-    <string name="error_select_both">Choose both source and destination first.</string>
+    <string name="status_success">SUCCESS</string>
+    <string name="status_partial_conflicts">PARTIAL / CONFLICTS</string>
+    <string name="status_failed">FAILED</string>
+    <string name="status_never_run">NEVER RUN</string>
+
+    <string name="last_attempt_fmt">Last attempt: %1$s</string>
+    <string name="last_attempt_none">Last attempt: None</string>
+    <string name="last_success_fmt">Last success: %1$s</string>
+    <string name="last_success_none">Last success: None</string>
+    <string name="counts_fmt">Copied: %1$d · Skipped: %2$d · Failed: %3$d</string>
+
+    <string name="empty_jobs_title">No backup jobs configured</string>
+    <string name="empty_jobs_desc">Tap "+ Add Backup Job" below to configure your first one-way folder backup.</string>
+    <string name="banner_notif_disabled">⚠️ Backup notifications are disabled in Android settings.</string>
+
+    <string name="notification_channel_name">Backup results</string>
+    <string name="notification_channel_desc">Notifications for SAFBackup job completion and error alerts</string>
+    <string name="notif_success_body">%1$d copied · %2$d already backed up</string>
+    <string name="notif_conflict_body">Backup completed with %1$d conflict(s)/error(s)</string>
+    <string name="notif_failed_body">Backup failed: %1$s</string>
+    <string name="notif_failed_generic">Source or destination folder is no longer accessible</string>
+
+    <string name="error_enter_name">Please enter a name for this backup job.</string>
+    <string name="error_select_both">Please choose both source and destination folders.</string>
     <string name="error_same_folder">Source and destination must be different folders.</string>
-    <string name="error_permissions_revoked">Folder permissions have been revoked.\nRe-select the affected folder.</string>
-    <string name="error_permission_denied">Could not obtain persistent folder access.\nTry selecting the folder again.</string>
+    <string name="error_permission_denied">Could not obtain persistent folder access. Try selecting again.</string>
+
+    <string name="toast_job_queued">Backup queued for "%1$s"</string>
+    <string name="toast_backup_all_queued">Queued backup for all configured jobs</string>
+    <string name="toast_job_deleted">Deleted backup job "%1$s"</string>
+
+    <string name="imported_backup_name">Imported backup</string>
 </resources>

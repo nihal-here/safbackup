@@ -3,44 +3,18 @@ package dev.safbackup
 import android.content.Context
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
+import androidx.work.Constraints
 import androidx.work.CoroutineWorker
+import androidx.work.NetworkType
 import androidx.work.WorkerParameters
+import dev.safbackup.data.AppDatabase
+import dev.safbackup.data.BackupJob
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.security.MessageDigest
 
-/**
- * Copies files from a SAF source tree to a SAF destination tree.
- *
- * Semantics (append-only backup, NOT sync):
- *  - Only top-level files are processed (Aegis backups are flat).
- *  - If a filename exists at the destination AND matches the source (size + SHA-256),
- *    it is skipped as already backed up.
- *  - If a filename exists but does NOT match the source, it is reported as a
- *    conflict. The destination file is never deleted or overwritten automatically.
- *  - Destination-only files are never touched.
- *  - On copy failure, only the file THIS run created is cleaned up.
- *  - SHA-256 is computed for integrity verification of both existing and
- *    newly-copied files.
- *
- * Error handling:
- *  - CancellationException is always rethrown (structured concurrency).
- *  - SecurityException / config errors → Result.failure().
- *  - Per-file errors are recorded in BackupResult but don't abort the entire run.
- *  - Result is always success() or failure(); retry() is never used.
- *    Note on WorkManager periodic work: returning Result.failure() finishes the
- *    current execution attempt without triggering retry backoff, but WorkManager
- *    keeps the PeriodicWorkRequest enqueued for the next scheduled daily interval.
- *    The actual outcome (copied/skipped/failed & error list) is persisted in
- *    BackupResult for UI observability.
- *
- * Execution limits:
- *  - Aegis JSON backups are tiny (KB). The 10-minute WorkManager limit is
- *    not a concern for this use case. No foreground service is used.
- *  - The run is idempotent: reruns skip already-verified files.
- */
 class BackupWorker(
     appContext: Context,
     params: WorkerParameters
@@ -48,43 +22,50 @@ class BackupWorker(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val ctx = applicationContext
-        val prefs = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
-        val sourceUri = prefs.getString("source", null)
-        val destUri = prefs.getString("dest", null)
+        val jobId = inputData.getString(KEY_JOB_ID) ?: return@withContext Result.success()
 
-        if (sourceUri == null || destUri == null) {
-            return@withContext failPermanently("Source or destination not configured.")
-        }
-        if (sourceUri == destUri) {
-            return@withContext failPermanently("Source and destination are the same folder.")
-        }
+        val db = AppDatabase.getInstance(ctx)
+        val job = db.backupJobDao().getById(jobId) ?: return@withContext Result.success()
 
-        val source: DocumentFile
-        val dest: DocumentFile
+        val now = System.currentTimeMillis()
+
+        val source: DocumentFile?
+        val dest: DocumentFile?
         try {
-            source = DocumentFile.fromTreeUri(ctx, Uri.parse(sourceUri))
-                ?: return@withContext failPermanently("Source folder URI is invalid.")
-            dest = DocumentFile.fromTreeUri(ctx, Uri.parse(destUri))
-                ?: return@withContext failPermanently("Destination folder URI is invalid.")
+            source = DocumentFile.fromTreeUri(ctx, Uri.parse(job.sourceUri))
+            dest = DocumentFile.fromTreeUri(ctx, Uri.parse(job.destUri))
+
+            if (source == null || dest == null || job.sourceUri == job.destUri) {
+                return@withContext markJobFailed(
+                    db, job, now,
+                    listOf("Invalid source or destination folder configuration.")
+                )
+            }
 
             if (!source.canRead()) {
-                return@withContext failPermanently(
-                    "Cannot read source folder. Permission may have been revoked."
+                return@withContext markJobFailed(
+                    db, job, now,
+                    listOf("Cannot read source folder. Permission may have been revoked.")
                 )
             }
             if (!dest.canWrite()) {
-                return@withContext failPermanently(
-                    "Cannot write to destination folder. Permission may have been revoked."
+                return@withContext markJobFailed(
+                    db, job, now,
+                    listOf("Cannot write to destination folder. Permission may have been revoked.")
                 )
             }
         } catch (e: CancellationException) {
             throw e
-        } catch (_: SecurityException) {
-            return@withContext failPermanently(
-                "SAF permission denied. Re-select folders in the app."
+        } catch (e: SecurityException) {
+            return@withContext markJobFailed(
+                db, job, now,
+                listOf("SAF permission denied. Re-select folder permissions in app.")
             )
         } catch (e: Exception) {
-            return@withContext failPermanently("Cannot access folders: ${e.message}")
+            return@withContext markJobFailed(
+                db, job, now,
+                listOf("Cannot access folders: ${e.message}")
+            )
         }
 
         var copied = 0
@@ -93,118 +74,219 @@ class BackupWorker(
         val errors = mutableListOf<String>()
 
         try {
-            val sourceFiles = source.listFiles()
-
-            // Build a map of destination filename → DocumentFile for O(1) lookup.
-            val destFilesByName = mutableMapOf<String, DocumentFile>()
-            for (df in dest.listFiles()) {
-                val n = df.name
-                if (n != null && df.isFile) destFilesByName[n] = df
-            }
-
-            if (sourceFiles.isEmpty()) {
-                // Empty source is not an error — no new backups yet.
-                saveResult(ctx, copied = 0, skipped = 0, failed = 0, errors = emptyList())
-                return@withContext Result.success()
-            }
-
-            for (src in sourceFiles) {
-                ensureActive()
-
-                val name = src.name
-                if (name == null || !src.isFile) continue
-
-                val existing = destFilesByName[name]
-                if (existing != null) {
-                    // A file with this name exists at the destination.
-                    // Verify it matches the source before skipping.
-                    try {
-                        val verdict = verifyExisting(src, existing)
-                        when (verdict) {
-                            VerifyResult.MATCH -> {
-                                skipped++
-                                continue
-                            }
-                            VerifyResult.MISMATCH -> {
-                                // Conflict: destination file differs from source.
-                                // Do NOT delete or overwrite. Report to user.
-                                failed++
-                                errors.add("$name (destination differs from source — possible corrupt partial copy)")
-                                continue
-                            }
-                            VerifyResult.UNREADABLE -> {
-                                // Can't read one side for verification.
-                                // Conservatively report rather than blindly skip.
-                                failed++
-                                errors.add("$name (destination exists but could not be verified)")
-                                continue
-                            }
-                        }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        failed++
-                        errors.add("$name (verification error: ${e.message})")
-                        continue
-                    }
-                }
-
-                // File does not exist at destination. Copy it.
-                try {
-                    val ok = copySingleFile(src, dest, name)
-                    if (ok) {
-                        copied++
-                    } else {
-                        failed++
-                        errors.add("$name (copy failed)")
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: SecurityException) {
-                    failed++
-                    errors.add("$name (permission denied)")
-                } catch (e: Exception) {
-                    failed++
-                    errors.add("$name (${e.message})")
-                }
+            if (job.isRecursive) {
+                val stats = copyDirectoryRecursive(source, dest, "", 0)
+                copied += stats.copied
+                skipped += stats.skipped
+                failed += stats.failed
+                errors.addAll(stats.errors)
+            } else {
+                val stats = copyTopLevelFilesOnly(source, dest)
+                copied += stats.copied
+                skipped += stats.skipped
+                failed += stats.failed
+                errors.addAll(stats.errors)
             }
         } catch (e: CancellationException) {
             throw e
-        } catch (_: SecurityException) {
-            return@withContext failPermanently("Permission denied listing source files.")
+        } catch (e: SecurityException) {
+            failed++
+            errors.add("Permission denied during file traversal.")
+        } catch (e: Exception) {
+            failed++
+            errors.add("Traversal error: ${e.message}")
         }
 
-        saveResult(ctx, copied, skipped, failed, errors)
+        val finalStatus = when {
+            failed > 0 && copied == 0 && skipped == 0 -> BackupJob.STATUS_FAILED
+            failed > 0 -> BackupJob.STATUS_PARTIAL_CONFLICTS
+            else -> BackupJob.STATUS_SUCCESS
+        }
 
-        // Always return success or failure, never retry.
-        // For periodic work: the next scheduled run is the retry.
-        // For one-time work: the user sees the result and can re-trigger.
-        // This avoids hammering a failing provider with exponential backoff
-        // retries that serve no purpose when the next daily run is imminent.
+        val newSuccessfulTime = if (finalStatus == BackupJob.STATUS_SUCCESS) {
+            now
+        } else {
+            job.lastSuccessfulTime
+        }
+
+        val updatedJob = job.copy(
+            lastAttemptTime = now,
+            lastSuccessfulTime = newSuccessfulTime,
+            lastStatus = finalStatus,
+            lastCopiedCount = copied,
+            lastSkippedCount = skipped,
+            lastFailedCount = failed,
+            lastErrors = errors.joinToString("\n")
+        )
+
+        db.backupJobDao().update(updatedJob)
+
+        NotificationHelper.maybeNotifyResult(
+            ctx, updatedJob, copied, skipped, failed, finalStatus, errors
+        )
+
         Result.success()
     }
 
-    // ── Existing-file verification ───────────────────────────────────────────────
+    private data class CopyStats(
+        val copied: Int,
+        val skipped: Int,
+        val failed: Int,
+        val errors: List<String>
+    )
+
+    private suspend fun copyTopLevelFilesOnly(
+        sourceDir: DocumentFile,
+        destDir: DocumentFile
+    ): CopyStats {
+        var copied = 0
+        var skipped = 0
+        var failed = 0
+        val errors = mutableListOf<String>()
+
+        val destChildren = destDir.listFiles()
+            .filter { it.name != null }
+            .associateBy { it.name!! }
+
+        val sourceFiles = sourceDir.listFiles().filter { it.isFile }
+
+        for (src in sourceFiles) {
+            coroutineContext.ensureActive()
+            val name = src.name ?: continue
+
+            val existing = destChildren[name]
+            if (existing != null) {
+                if (existing.isDirectory) {
+                    failed++
+                    errors.add("Cannot copy file '$name' because destination contains a directory with that name.")
+                    continue
+                }
+
+                when (verifyExisting(src, existing)) {
+                    VerifyResult.MATCH -> skipped++
+                    VerifyResult.MISMATCH -> {
+                        failed++
+                        errors.add("$name (destination differs from source — conflict / possible corrupt copy)")
+                    }
+                    VerifyResult.UNREADABLE -> {
+                        failed++
+                        errors.add("$name (destination exists but could not be read for verification)")
+                    }
+                }
+            } else {
+                val ok = copySingleFile(src, destDir, name)
+                if (ok) copied++ else {
+                    failed++
+                    errors.add("$name (copy failed)")
+                }
+            }
+        }
+
+        return CopyStats(copied, skipped, failed, errors)
+    }
+
+    private suspend fun copyDirectoryRecursive(
+        srcDir: DocumentFile,
+        destDir: DocumentFile,
+        relPath: String,
+        depth: Int
+    ): CopyStats {
+        if (depth > MAX_RECURSION_DEPTH) {
+            return CopyStats(0, 0, 1, listOf("Max directory depth reached at $relPath"))
+        }
+
+        var copied = 0
+        var skipped = 0
+        var failed = 0
+        val errors = mutableListOf<String>()
+
+        val destChildren = destDir.listFiles()
+            .filter { it.name != null }
+            .associateBy { it.name!! }
+
+        val sourceItems = srcDir.listFiles()
+
+        for (srcItem in sourceItems) {
+            coroutineContext.ensureActive()
+            val name = srcItem.name ?: continue
+            val itemPath = if (relPath.isEmpty()) name else "$relPath/$name"
+
+            val existing = destChildren[name]
+
+            if (srcItem.isDirectory) {
+                var targetDestSubdir: DocumentFile? = null
+
+                if (existing != null) {
+                    if (!existing.isDirectory) {
+                        failed++
+                        errors.add("Cannot create directory '$itemPath' because destination contains a file with that name.")
+                        continue
+                    }
+                    targetDestSubdir = existing
+                } else {
+                    val created = destDir.createDirectory(name)
+                    if (created == null || !created.isDirectory) {
+                        failed++
+                        errors.add("Failed to create destination directory '$itemPath'.")
+                        continue
+                    }
+                    if (created.name != name) {
+                        failed++
+                        errors.add("Destination provider mutated directory name '${created.name}' instead of '$name'.")
+                        try { created.delete() } catch (_: Exception) {}
+                        continue
+                    }
+                    targetDestSubdir = created
+                }
+
+                val subStats = copyDirectoryRecursive(srcItem, targetDestSubdir, itemPath, depth + 1)
+                copied += subStats.copied
+                skipped += subStats.skipped
+                failed += subStats.failed
+                errors.addAll(subStats.errors)
+
+            } else if (srcItem.isFile) {
+                if (existing != null) {
+                    if (existing.isDirectory) {
+                        failed++
+                        errors.add("Cannot copy file '$itemPath' because destination contains a directory with that name.")
+                        continue
+                    }
+
+                    when (verifyExisting(srcItem, existing)) {
+                        VerifyResult.MATCH -> skipped++
+                        VerifyResult.MISMATCH -> {
+                            failed++
+                            errors.add("$itemPath (destination differs from source — conflict / possible corrupt copy)")
+                        }
+                        VerifyResult.UNREADABLE -> {
+                            failed++
+                            errors.add("$itemPath (destination exists but could not be read for verification)")
+                        }
+                    }
+                } else {
+                    val ok = copySingleFile(srcItem, destDir, name)
+                    if (ok) copied++ else {
+                        failed++
+                        errors.add("$itemPath (copy failed)")
+                    }
+                }
+            }
+        }
+
+        return CopyStats(copied, skipped, failed, errors)
+    }
 
     private enum class VerifyResult { MATCH, MISMATCH, UNREADABLE }
 
-    /**
-     * Compare an existing destination file against the source.
-     *
-     * For small Aegis JSON files, this computes SHA-256 of both sides.
-     * Returns MATCH if they are identical, MISMATCH if they differ,
-     * or UNREADABLE if either side can't be read for verification.
-     */
     private fun verifyExisting(src: DocumentFile, dst: DocumentFile): VerifyResult {
         val srcSize = src.length()
         val dstSize = dst.length()
 
-        // Quick size check: if both are readable and sizes differ, mismatch.
         if (srcSize > 0 && dstSize > 0 && srcSize != dstSize) {
             return VerifyResult.MISMATCH
         }
 
-        // Full content verification via SHA-256.
         val srcHash = sha256(src.uri) ?: return VerifyResult.UNREADABLE
         val dstHash = sha256(dst.uri) ?: return VerifyResult.UNREADABLE
 
@@ -215,23 +297,6 @@ class BackupWorker(
         }
     }
 
-    // ── Single-file copy with integrity ──────────────────────────────────────────
-
-    /**
-     * Copy one file from source to destination with integrity checking.
-     *
-     * Strategy:
-     *  1. SHA-256 hash the source.
-     *  2. Create a new file at the destination.
-     *  3. Stream-copy source → destination.
-     *  4. Verify destination size matches source size.
-     *  5. Best-effort: re-read destination and verify SHA-256 matches.
-     *     If the provider returns inconsistent data on immediate readback
-     *     (e.g. Google Drive async upload), size match alone is accepted.
-     *  6. On any failure, delete ONLY the file we just created.
-     *
-     * Returns true on success, false on failure.
-     */
     private fun copySingleFile(
         src: DocumentFile,
         destDir: DocumentFile,
@@ -241,15 +306,17 @@ class BackupWorker(
         val mime = src.type ?: "application/octet-stream"
         val sourceSize = src.length()
 
-        // 1. Hash the source file.
         val sourceHash = sha256(src.uri) ?: return false
-
-        // 2. Create destination file.
         val dst = destDir.createFile(mime, name) ?: return false
+
+        if (dst.name != name) {
+            // Provider mutated name (e.g. name (1).json). Clean up.
+            try { dst.delete() } catch (_: Exception) {}
+            return false
+        }
 
         var success = false
         try {
-            // 3. Stream-copy.
             resolver.openInputStream(src.uri).use { input ->
                 resolver.openOutputStream(dst.uri, "w").use { output ->
                     if (input == null || output == null) return false
@@ -258,43 +325,27 @@ class BackupWorker(
                 }
             }
 
-            // 4. Size verification.
             val destSize = dst.length()
             if (sourceSize > 0 && destSize > 0 && destSize != sourceSize) {
-                return false // cleaned up in finally
+                return false
             }
 
-            // 5. Best-effort hash verification.
-            //    Google Drive's provider may async-upload and return stale data
-            //    on immediate readback. If the hash read succeeds and mismatches,
-            //    we reject. If it fails (null), we accept on size match alone —
-            //    the provider is responsible for upload integrity.
             val destHash = sha256(dst.uri)
             if (destHash != null && !destHash.contentEquals(sourceHash)) {
-                return false // cleaned up in finally
+                return false
             }
 
             success = true
             return true
         } finally {
             if (!success) {
-                // Clean up only the file THIS operation created.
-                // Never delete a pre-existing destination file.
                 try {
                     dst.delete()
-                } catch (_: Exception) {
-                    // Best effort. If delete fails, a corrupt partial file
-                    // remains. The next run will detect the mismatch via
-                    // verifyExisting() and report it as a conflict rather
-                    // than silently skipping it.
-                }
+                } catch (_: Exception) {}
             }
         }
     }
 
-    // ── Utilities ────────────────────────────────────────────────────────────────
-
-    /** SHA-256 a file via SAF content resolver. Returns null on any error. */
     private fun sha256(uri: Uri): ByteArray? {
         return try {
             val digest = MessageDigest.getInstance("SHA-256")
@@ -311,25 +362,38 @@ class BackupWorker(
         }
     }
 
-    /** Record a permanent failure and return Result.failure(). */
-    private fun failPermanently(message: String): Result {
-        saveResult(applicationContext, 0, 0, 0, listOf(message))
+    private suspend fun markJobFailed(
+        db: AppDatabase,
+        job: BackupJob,
+        now: Long,
+        errors: List<String>
+    ): Result {
+        val updatedJob = job.copy(
+            lastAttemptTime = now,
+            lastStatus = BackupJob.STATUS_FAILED,
+            lastFailedCount = errors.size,
+            lastErrors = errors.joinToString("\n")
+        )
+        db.backupJobDao().update(updatedJob)
+        NotificationHelper.maybeNotifyResult(
+            applicationContext, updatedJob, 0, 0, errors.size, BackupJob.STATUS_FAILED, errors
+        )
         return Result.failure()
     }
 
-    private fun saveResult(
-        ctx: Context,
-        copied: Int,
-        skipped: Int,
-        failed: Int,
-        errors: List<String>
-    ) {
-        BackupResult.save(ctx, BackupResult(
-            timestampMillis = System.currentTimeMillis(),
-            copied = copied,
-            skipped = skipped,
-            failed = failed,
-            errors = errors
-        ))
+    companion object {
+        const val KEY_JOB_ID = "job_id"
+        const val MAX_RECURSION_DEPTH = 30
+
+        fun getWorkName(jobId: String): String = "backup_daily_$jobId"
+
+        fun buildConstraints(wifiOnly: Boolean, chargingOnly: Boolean): Constraints {
+            return Constraints.Builder().apply {
+                if (wifiOnly) setRequiredNetworkType(NetworkType.UNMETERED)
+                if (chargingOnly) setRequiresCharging(true)
+                setRequiresBatteryNotLow(true)
+                setRequiresStorageNotLow(true)
+            }.build()
+        }
     }
 }
