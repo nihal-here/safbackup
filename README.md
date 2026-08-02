@@ -1,75 +1,92 @@
-# SAF Backup (V2)
+# SAF Backup
 
-Tiny, safe, one-way Android folder backup utility, designed for backing up
-local folders (such as [Aegis Authenticator](https://getaegis.app/) encrypted exports)
-to Google Drive or other local/cloud directories via Android's Storage Access Framework (SAF).
+[![Build & Release](https://github.com/nihal-here/safbackup/actions/workflows/build-apk.yml/badge.svg)](https://github.com/nihal-here/safbackup/actions/workflows/build-apk.yml)
 
-## Security Model
+Tiny, safe, one-way Android folder backup utility built around Android's
+Storage Access Framework.
 
-- **NO** `MANAGE_EXTERNAL_STORAGE`
-- **NO** `READ_EXTERNAL_STORAGE` / `WRITE_EXTERNAL_STORAGE`
-- **NO** `INTERNET` permission
-- **NO** Google Account / Drive API integration
-- **NO** rclone, cloud SDKs, telemetry, or analytics
-- Source and destination folders are chosen through Android's SAF folder picker.
-- The app only retains access to the directory trees explicitly granted by the user.
-- Destination-only files and directories are **never** deleted.
+SAF Backup is designed for local folders that you already control, such as
+[Aegis Authenticator](https://getaegis.app/) encrypted exports, documents, or
+photo folders. Pick a source folder, pick a destination folder, and SAF Backup
+copies new content without deleting or overwriting existing destination data.
 
+## What It Does
+
+- Creates multiple independent backup jobs.
+- Copies top-level files or recursively preserves subfolder structure.
+- Runs jobs manually, individually, or with **Back Up All Now**.
+- Supports optional automatic daily scheduling through WorkManager.
+- Can require Wi-Fi and/or charging for scheduled backup jobs.
+- Reports success, failures, conflicts, copied files, skipped files, and failed files.
+- Keeps last attempt and last successful backup timestamps separate.
+
+## Safety Model
+
+SAF Backup is a **one-way append-only backup tool**, not a sync engine.
+
+- Destination-only files and folders are never deleted.
+- Existing destination files are never overwritten.
+- Matching files are skipped after size and SHA-256 verification.
+- Different files at the same relative path are reported as conflicts and left untouched.
+- File-vs-folder path conflicts are reported without deleting anything.
+- Partial files created by a failed copy are cleaned up only for that failed run.
+
+## Privacy And Permissions
+
+SAF Backup intentionally avoids broad storage and network access.
+
+- No `MANAGE_EXTERNAL_STORAGE`
+- No `READ_EXTERNAL_STORAGE` or `WRITE_EXTERNAL_STORAGE`
+- No `INTERNET` permission
+- No Google Account, Google Drive API, rclone, cloud SDK, telemetry, or analytics
+- Uses only folders explicitly selected through Android's SAF folder picker
+- Persists only the SAF tree grants needed for configured backup jobs
+
+When backing up to Google Drive or another cloud-backed provider, that provider's
+Android DocumentsProvider handles the sync. SAF Backup itself does not connect
+to the network.
+
+```text
+Source folder
+    -> Android SAF read grant
+    -> SAF Backup copy engine
+    -> Android SAF read/write grant
+    -> Destination folder or cloud-backed DocumentsProvider
 ```
-Local Aegis / Documents / Photos folder
-      ↓
-Android SAF (persistent tree permission, READ only)
-      ↓
-SAF Backup V2 (copies new files, preserves folder structures)
-      ↓
-Android SAF (persistent tree permission, READ + WRITE)
-      ↓
-Google Drive DocumentsProvider
-```
 
-Google Drive's Android app handles all networking.
-SAF Backup itself does not connect to any network.
+## Notifications
 
-## V2 Capabilities
+Each job can choose how noisy it should be:
 
-### 1. Multiple Independent Backup Jobs
-- Configure multiple independent backup tasks (e.g. Aegis, Important Documents, Photos).
-- Each job has its own source/destination tree, recursion setting, constraints, notification policy, and daily schedule.
-- Run jobs individually or tap **Back Up All Now**.
-- Deleting a job cancels its schedule and safely releases SAF permissions only if no other job requires them.
+- **Failures & conflicts only**: alert only when attention is needed.
+- **Every backup**: send a result notification after each automatic run.
+- **Off**: keep the job silent.
 
-### 2. Recursive Subfolder Backup (Optional per job)
-- **Disabled**: Only processes top-level files directly inside the source directory.
-- **Enabled**: Recursively traverses the source tree and reproduces the directory structure under destination.
-- Empty directories in the source folder are preserved at the destination.
+On Android 13 and newer, result notifications require `POST_NOTIFICATIONS`.
+Backups continue to run even if notification permission is denied.
 
-### 3. Backup Notifications
-- **Failures & conflicts only** (default): Sends alert notifications if a backup fails or encounters conflicts/revoked permissions.
-- **Every backup**: Sends a notification after every automatic run summarizing copied/skipped counts.
-- **Off**: Disables result notifications for that job.
-- Requires `POST_NOTIFICATIONS` on Android 13+. If denied, backups continue operating normally.
+## Releases
 
-## Backup Semantics & Safety
+Release builds are produced from version tags such as `v0.2.3`.
 
-This is a **one-way append-only backup**, NOT synchronization.
+The GitHub Actions release workflow derives:
 
-1. **Never delete**: Destination-only files and directories are never deleted.
-2. **Never overwrite**: Existing destination files with identical relative path, size, and SHA-256 hash are skipped.
-3. **Conflict protection**: Existing destination files with differing size or hash are marked as conflicts (`PARTIAL / CONFLICTS`) and left untouched.
-4. **Type conflict protection**: If source has a directory `foo/` but destination has a file `foo`, or source has a file `bar` but destination has a directory `bar/`, a conflict is logged without deleting the destination entry.
-5. **Partial copy cleanup**: On copy failure, only the destination file created by *that specific run* is cleaned up.
+- `versionName` from the tag without the `v` prefix.
+- `versionCode` as `major * 1000000 + minor * 1000 + patch`.
 
-## Daily Scheduling
-
-WorkManager periodic work is inexact. Daily backup timing is managed by Android based on device Doze mode and constraints (Wi-Fi only, charging only).
-Each job tracks both `Last attempt` and `Last success` timestamps separately so failed attempts do not obscure the last known good backup time.
+For example, `v0.2.3` becomes `versionName = 0.2.3` and
+`versionCode = 2003`.
 
 ## Build
 
 Open the project in Android Studio and sync Gradle, or run:
 
 ```bash
-./gradlew assembleDebug
+gradle test assembleDebug
 ```
 
-Output APK: `app/build/outputs/apk/debug/app-debug.apk`
+Debug APK output:
+
+```text
+app/build/outputs/apk/debug/app-debug.apk
+```
