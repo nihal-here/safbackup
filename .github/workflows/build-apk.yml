@@ -28,7 +28,7 @@ jobs:
           validate-wrappers: false
 
       - name: Build debug APK
-        run: gradle :app:kaptDebugKotlin assembleDebug --stacktrace --info
+        run: gradle assembleDebug
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
