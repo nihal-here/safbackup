@@ -1,35 +1,71 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
     android:orientation="vertical"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:padding="16dp">
+    android:layout_height="match_parent">
 
-    <TextView
-        android:text="@string/app_name"
-        android:textStyle="bold"
-        android:textSize="26sp"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"/>
-
-    <TextView
-        android:text="@string/app_description"
-        android:textSize="13sp"
-        android:layout_marginTop="4dp"
-        android:layout_marginBottom="12dp"
+    <!-- Top Header Container (Status bar inset applied to padding) -->
+    <LinearLayout
+        android:id="@+id/headerContainer"
+        android:orientation="vertical"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="12dp"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"/>
+        android:layout_height="wrap_content">
 
-    <TextView
-        android:id="@+id/notifBannerText"
-        android:text="@string/banner_notif_disabled"
-        android:textColor="@android:color/holo_orange_dark"
-        android:textSize="12sp"
-        android:visibility="gone"
-        android:layout_marginBottom="8dp"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"/>
+        <TextView
+            android:text="@string/app_name"
+            android:textStyle="bold"
+            android:textSize="26sp"
+            android:textColor="?attr/colorOnSurface"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
 
+        <TextView
+            android:text="@string/app_description"
+            android:textSize="13sp"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:layout_marginTop="2dp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"/>
+
+        <!-- Notification Warning Banner -->
+        <LinearLayout
+            android:id="@+id/notifBanner"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="10dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_chip"
+            android:visibility="gone"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <TextView
+                android:text="@string/banner_notif_disabled"
+                android:textColor="@android:color/holo_orange_dark"
+                android:textSize="12sp"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"/>
+
+            <Button
+                android:id="@+id/notifSettingsButton"
+                android:text="@string/btn_settings"
+                style="?attr/materialButtonOutlinedStyle"
+                android:textSize="11sp"
+                android:minHeight="36dp"
+                android:layout_marginStart="8dp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"/>
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Main List or Empty View -->
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -37,6 +73,11 @@
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recyclerView"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="8dp"
+            android:clipToPadding="false"
             android:scrollbars="vertical"
             android:layout_width="match_parent"
             android:layout_height="match_parent"/>
@@ -45,36 +86,59 @@
             android:id="@+id/emptyView"
             android:orientation="vertical"
             android:gravity="center"
+            android:padding="24dp"
             android:visibility="gone"
             android:layout_width="match_parent"
             android:layout_height="match_parent">
 
+            <ImageView
+                android:src="@android:drawable/ic_menu_save"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                app:tint="?attr/colorOutline"
+                android:contentDescription="@null"/>
+
             <TextView
                 android:text="@string/empty_jobs_title"
                 android:textStyle="bold"
-                android:textSize="18sp"
+                android:textSize="20sp"
+                android:textColor="?attr/colorOnSurface"
+                android:layout_marginTop="16dp"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"/>
 
             <TextView
                 android:text="@string/empty_jobs_desc"
                 android:textSize="14sp"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:gravity="center"
                 android:layout_marginTop="8dp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"/>
+
+            <Button
+                android:id="@+id/emptyAddButton"
+                android:text="@string/btn_add_job"
+                android:layout_marginTop="20dp"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"/>
         </LinearLayout>
     </FrameLayout>
 
+    <!-- Bottom Action Bar (Navigation bar inset applied to padding) -->
     <LinearLayout
+        android:id="@+id/bottomBar"
         android:orientation="horizontal"
-        android:layout_marginTop="12dp"
+        android:padding="16dp"
+        android:background="?attr/colorSurface"
+        android:elevation="8dp"
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
 
         <Button
             android:id="@+id/addJobButton"
             android:text="@string/btn_add_job"
+            android:minHeight="48dp"
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="wrap_content"/>
@@ -82,7 +146,9 @@
         <Button
             android:id="@+id/backupAllButton"
             android:text="@string/btn_backup_all"
-            android:layout_marginStart="8dp"
+            style="?attr/materialButtonOutlinedStyle"
+            android:minHeight="48dp"
+            android:layout_marginStart="12dp"
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="wrap_content"/>

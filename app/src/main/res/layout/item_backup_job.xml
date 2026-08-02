@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginBottom="12dp"
-    app:cardCornerRadius="8dp"
-    app:cardElevation="2dp">
+    app:cardCornerRadius="12dp"
+    app:cardElevation="2dp"
+    app:strokeWidth="1dp"
+    app:strokeColor="?attr/colorOutline">
 
     <LinearLayout
         android:orientation="vertical"
@@ -13,6 +16,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
 
+        <!-- Title & Status Badge Header -->
         <LinearLayout
             android:orientation="horizontal"
             android:gravity="center_vertical"
@@ -23,29 +27,106 @@
                 android:id="@+id/jobName"
                 android:textStyle="bold"
                 android:textSize="18sp"
+                android:textColor="?attr/colorOnSurface"
                 android:layout_width="0dp"
                 android:layout_weight="1"
                 android:layout_height="wrap_content"/>
 
-            <TextView
-                android:id="@+id/statusBadge"
-                android:textStyle="bold"
-                android:textSize="12sp"
+            <LinearLayout
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
-                android:paddingTop="2dp"
-                android:paddingBottom="2dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp"
+                android:background="@drawable/bg_status_badge"
                 android:layout_width="wrap_content"
+                android:layout_height="wrap_content">
+
+                <ImageView
+                    android:id="@+id/statusIcon"
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:layout_marginEnd="4dp"
+                    android:contentDescription="@null"/>
+
+                <TextView
+                    android:id="@+id/statusText"
+                    android:textStyle="bold"
+                    android:textSize="12sp"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"/>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Source -> Destination Flow -->
+        <LinearLayout
+            android:orientation="vertical"
+            android:layout_marginTop="12dp"
+            android:padding="10dp"
+            android:background="@drawable/bg_folder_card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <TextView
+                android:id="@+id/sourceLabel"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textColor="?attr/colorOnSurface"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"/>
+
+            <TextView
+                android:text="↓"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="?attr/colorOutline"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="2dp"
+                android:layout_marginBottom="2dp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"/>
+
+            <TextView
+                android:id="@+id/destLabel"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textColor="?attr/colorOnSurface"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"/>
         </LinearLayout>
 
+        <!-- Timestamps & Counts -->
         <TextView
-            android:id="@+id/jobSummary"
-            android:textSize="13sp"
+            android:id="@+id/lastSuccessText"
+            android:textSize="12sp"
+            android:textColor="?attr/colorOnSurface"
+            android:layout_marginTop="10dp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"/>
+
+        <TextView
+            android:id="@+id/lastAttemptText"
+            android:textSize="12sp"
+            android:textColor="@android:color/holo_red_dark"
+            android:visibility="gone"
+            android:layout_marginTop="2dp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"/>
+
+        <TextView
+            android:id="@+id/countsText"
+            android:textSize="12sp"
+            android:textColor="?attr/colorOnSurface"
             android:layout_marginTop="4dp"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"/>
 
+        <!-- Badges Row -->
         <LinearLayout
             android:orientation="horizontal"
             android:layout_marginTop="8dp"
@@ -55,49 +136,53 @@
             <TextView
                 android:id="@+id/badgeDaily"
                 android:textSize="11sp"
-                android:paddingEnd="12dp"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:background="@drawable/bg_chip"
+                android:layout_marginEnd="6dp"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"/>
 
             <TextView
                 android:id="@+id/badgeRecursive"
                 android:textSize="11sp"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:background="@drawable/bg_chip"
+                android:layout_marginEnd="6dp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"/>
+
+            <TextView
+                android:id="@+id/badgeWifi"
+                android:textSize="11sp"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:background="@drawable/bg_chip"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"/>
         </LinearLayout>
 
-        <TextView
-            android:id="@+id/lastAttemptText"
-            android:textSize="12sp"
-            android:layout_marginTop="8dp"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"/>
-
-        <TextView
-            android:id="@+id/lastSuccessText"
-            android:textSize="12sp"
-            android:layout_marginTop="2dp"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"/>
-
-        <TextView
-            android:id="@+id/countsText"
-            android:textSize="12sp"
-            android:layout_marginTop="4dp"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"/>
-
+        <!-- Errors List -->
         <TextView
             android:id="@+id/errorListText"
             android:textSize="11sp"
             android:textColor="@android:color/holo_red_dark"
             android:visibility="gone"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="6dp"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"/>
 
+        <!-- Action Row -->
         <LinearLayout
             android:orientation="horizontal"
+            android:gravity="center_vertical"
             android:layout_marginTop="12dp"
             android:layout_width="match_parent"
             android:layout_height="wrap_content">
@@ -105,29 +190,21 @@
             <Button
                 android:id="@+id/runNowButton"
                 android:text="@string/btn_run_now"
-                style="?attr/materialButtonOutlinedStyle"
+                android:minHeight="48dp"
                 android:layout_width="0dp"
                 android:layout_weight="1"
                 android:layout_height="wrap_content"/>
 
-            <Button
-                android:id="@+id/editButton"
-                android:text="@string/btn_edit"
-                style="?attr/materialButtonOutlinedStyle"
-                android:layout_marginStart="6dp"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:layout_height="wrap_content"/>
-
-            <Button
-                android:id="@+id/deleteButton"
-                android:text="@string/btn_delete"
-                style="?attr/materialButtonOutlinedStyle"
-                android:textColor="@android:color/holo_red_dark"
-                android:layout_marginStart="6dp"
-                android:layout_width="0dp"
-                android:layout_weight="1"
+            <ImageButton
+                android:id="@+id/overflowButton"
+                android:src="@android:drawable/ic_menu_more"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/cd_job_options"
+                android:minWidth="48dp"
+                android:minHeight="48dp"
+                android:layout_marginStart="8dp"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"/>
         </LinearLayout>
     </LinearLayout>
-</androidx.cardview.widget.CardView>
+</com.google.android.material.card.MaterialCardView>

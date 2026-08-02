@@ -6,8 +6,12 @@ import android.net.Uri
 import android.os.Bundle
 import android.widget.ArrayAdapter
 import android.widget.Toast
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
@@ -41,9 +45,22 @@ class EditJobActivity : AppCompatActivity() {
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         b = ActivityEditJobBinding.inflate(layoutInflater)
         setContentView(b.root)
+
+        // Apply WindowInsets for status bar (top) and navigation bar (bottom)
+        ViewCompat.setOnApplyWindowInsetsListener(b.root) { _, insets ->
+            val sysBars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            b.contentLayout.updatePadding(
+                top = sysBars.top,
+                bottom = sysBars.bottom
+            )
+            insets
+        }
 
         editingJobId = intent.getStringExtra(EXTRA_JOB_ID)
 
@@ -184,7 +201,6 @@ class EditJobActivity : AppCompatActivity() {
                     notificationPref = notifPref
                 )
 
-                // Safely release unused SAF grants if source/dest changed
                 if (existing != null) {
                     val allJobs = db.backupJobDao().getAll()
                     if (existing.sourceUri != source) {
@@ -197,7 +213,6 @@ class EditJobActivity : AppCompatActivity() {
 
                 db.backupJobDao().insert(job)
 
-                // Manage WorkManager daily schedule
                 val workName = BackupWorker.getWorkName(job.id)
                 if (job.autoDaily) {
                     val req = PeriodicWorkRequestBuilder<BackupWorker>(24, TimeUnit.HOURS)

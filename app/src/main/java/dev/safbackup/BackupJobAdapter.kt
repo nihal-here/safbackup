@@ -1,10 +1,12 @@
 package dev.safbackup
 
+import android.content.Context
 import android.net.Uri
 import android.text.format.DateFormat
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.appcompat.widget.PopupMenu
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
@@ -16,8 +18,17 @@ import java.util.Date
 class BackupJobAdapter(
     private val onRunNow: (BackupJob) -> Unit,
     private val onEdit: (BackupJob) -> Unit,
-    private val onDelete: (BackupJob) -> Unit
+    private val onDelete: (BackupJob) -> Unit,
+    private val onToggleDaily: (BackupJob) -> Unit
 ) : ListAdapter<BackupJob, BackupJobAdapter.ViewHolder>(DiffCallback) {
+
+    private val runningJobIds = mutableSetOf<String>()
+
+    fun setRunningJobs(jobIds: Set<String>) {
+        runningJobIds.clear()
+        runningJobIds.addAll(jobIds)
+        notifyDataSetChanged()
+    }
 
     class ViewHolder(val b: ItemBackupJobBinding) : RecyclerView.ViewHolder(b.root)
 
@@ -34,42 +45,53 @@ class BackupJobAdapter(
         val b = holder.b
 
         b.jobName.text = job.name
-        b.jobSummary.text = "${friendlyName(job.sourceUri)} → ${friendlyName(job.destUri)}"
+        b.sourceLabel.text = friendlyName(job.sourceUri)
+        b.destLabel.text = friendlyName(job.destUri)
 
-        b.badgeDaily.text = if (job.autoDaily) ctx.getString(R.string.badge_daily_on) else ctx.getString(R.string.badge_daily_off)
-        b.badgeRecursive.text = if (job.isRecursive) ctx.getString(R.string.badge_recursive_on) else ctx.getString(R.string.badge_recursive_off)
-
-        val statusText = when (job.lastStatus) {
-            BackupJob.STATUS_SUCCESS -> ctx.getString(R.string.status_success)
-            BackupJob.STATUS_PARTIAL_CONFLICTS -> ctx.getString(R.string.status_partial_conflicts)
-            BackupJob.STATUS_FAILED -> ctx.getString(R.string.status_failed)
-            else -> ctx.getString(R.string.status_never_run)
+        // Status badge: Icon + Text + Color
+        val (statusText, statusColor, statusIcon) = when (job.lastStatus) {
+            BackupJob.STATUS_SUCCESS -> Triple(
+                ctx.getString(R.string.status_success),
+                ContextCompat.getColor(ctx, R.color.status_success),
+                R.drawable.ic_status_success
+            )
+            BackupJob.STATUS_PARTIAL_CONFLICTS -> Triple(
+                ctx.getString(R.string.status_partial_conflicts),
+                ContextCompat.getColor(ctx, R.color.status_warning),
+                R.drawable.ic_status_warning
+            )
+            BackupJob.STATUS_FAILED -> Triple(
+                ctx.getString(R.string.status_failed),
+                ContextCompat.getColor(ctx, R.color.status_error),
+                R.drawable.ic_status_error
+            )
+            else -> Triple(
+                ctx.getString(R.string.status_never_run),
+                ContextCompat.getColor(ctx, R.color.status_neutral),
+                R.drawable.ic_status_neutral
+            )
         }
 
-        b.statusBadge.text = statusText
-        val badgeColor = when (job.lastStatus) {
-            BackupJob.STATUS_SUCCESS -> ContextCompat.getColor(ctx, android.R.color.holo_green_dark)
-            BackupJob.STATUS_PARTIAL_CONFLICTS -> ContextCompat.getColor(ctx, android.R.color.holo_orange_dark)
-            BackupJob.STATUS_FAILED -> ContextCompat.getColor(ctx, android.R.color.holo_red_dark)
-            else -> ContextCompat.getColor(ctx, android.R.color.darker_gray)
-        }
-        b.statusBadge.setTextColor(badgeColor)
+        b.statusText.text = statusText
+        b.statusText.setTextColor(statusColor)
+        b.statusIcon.setImageResource(statusIcon)
+        b.statusIcon.setColorFilter(statusColor)
 
-        val attemptStr = if (job.lastAttemptTime != null) {
-            val dateStr = formatDateTime(ctx, job.lastAttemptTime)
-            ctx.getString(R.string.last_attempt_fmt, dateStr)
-        } else {
-            ctx.getString(R.string.last_attempt_none)
-        }
-        b.lastAttemptText.text = attemptStr
-
+        // Timestamps: Last Successful vs Last Attempt
         val successStr = if (job.lastSuccessfulTime != null) {
-            val dateStr = formatDateTime(ctx, job.lastSuccessfulTime)
-            ctx.getString(R.string.last_success_fmt, dateStr)
+            formatDateTime(ctx, job.lastSuccessfulTime)
         } else {
-            ctx.getString(R.string.last_success_none)
+            ctx.getString(R.string.timestamp_never)
         }
-        b.lastSuccessText.text = successStr
+        b.lastSuccessText.text = ctx.getString(R.string.fmt_last_success, successStr)
+
+        if (job.lastAttemptTime != null && (job.lastStatus == BackupJob.STATUS_FAILED || job.lastStatus == BackupJob.STATUS_PARTIAL_CONFLICTS)) {
+            b.lastAttemptText.visibility = View.VISIBLE
+            val attemptStr = formatDateTime(ctx, job.lastAttemptTime)
+            b.lastAttemptText.text = ctx.getString(R.string.fmt_last_attempt, attemptStr, statusText)
+        } else {
+            b.lastAttemptText.visibility = View.GONE
+        }
 
         b.countsText.text = ctx.getString(
             R.string.counts_fmt,
@@ -78,6 +100,12 @@ class BackupJobAdapter(
             job.lastFailedCount
         )
 
+        // Badges
+        b.badgeDaily.text = if (job.autoDaily) ctx.getString(R.string.badge_daily_on) else ctx.getString(R.string.badge_daily_off)
+        b.badgeRecursive.text = if (job.isRecursive) ctx.getString(R.string.badge_recursive_on) else ctx.getString(R.string.badge_recursive_off)
+        b.badgeWifi.text = if (job.wifiOnly) ctx.getString(R.string.badge_wifi_on) else ctx.getString(R.string.badge_wifi_off)
+
+        // Errors list
         val errors = job.getErrorList()
         if (errors.isNotEmpty()) {
             b.errorListText.visibility = View.VISIBLE
@@ -86,9 +114,44 @@ class BackupJobAdapter(
             b.errorListText.visibility = View.GONE
         }
 
+        // Primary action: Back up now (with Running state)
+        val isRunning = runningJobIds.contains(job.id)
+        if (isRunning) {
+            b.runNowButton.isEnabled = false
+            b.runNowButton.text = ctx.getString(R.string.btn_backing_up)
+        } else {
+            b.runNowButton.isEnabled = true
+            b.runNowButton.text = ctx.getString(R.string.btn_run_now)
+        }
+
         b.runNowButton.setOnClickListener { onRunNow(job) }
-        b.editButton.setOnClickListener { onEdit(job) }
-        b.deleteButton.setOnClickListener { onDelete(job) }
+
+        // Overflow menu for less-common actions
+        b.overflowButton.setOnClickListener { view ->
+            showOverflowMenu(ctx, view, job)
+        }
+    }
+
+    private fun showOverflowMenu(context: Context, anchor: View, job: BackupJob) {
+        val popup = PopupMenu(context, anchor)
+        popup.menu.add(0, 1, 0, context.getString(R.string.menu_edit))
+        val toggleDailyText = if (job.autoDaily) {
+            context.getString(R.string.menu_disable_daily)
+        } else {
+            context.getString(R.string.menu_enable_daily)
+        }
+        popup.menu.add(0, 2, 1, toggleDailyText)
+        popup.menu.add(0, 3, 2, context.getString(R.string.menu_delete))
+
+        popup.setOnMenuItemClickListener { menuItem ->
+            when (menuItem.itemId) {
+                1 -> { onEdit(job); true }
+                2 -> { onToggleDaily(job); true }
+                3 -> { onDelete(job); true }
+                else -> false
+            }
+        }
+        popup.show()
     }
 
     private fun friendlyName(uriString: String): String {
@@ -100,9 +163,9 @@ class BackupJobAdapter(
         }
     }
 
-    private fun formatDateTime(context: android.content.Context, millis: Long): String {
+    private fun formatDateTime(context: Context, millis: Long): String {
         val d = Date(millis)
-        return DateFormat.getDateFormat(context).format(d) + " " + DateFormat.getTimeFormat(context).format(d)
+        return DateFormat.getDateFormat(context).format(d) + ", " + DateFormat.getTimeFormat(context).format(d)
     }
 
     object DiffCallback : DiffUtil.ItemCallback<BackupJob>() {

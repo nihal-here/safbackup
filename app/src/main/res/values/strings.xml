@@ -8,10 +8,17 @@
     <string name="btn_add_job">+ Add Backup Job</string>
     <string name="btn_backup_all">Back Up All Now</string>
     <string name="btn_run_now">Back Up Now</string>
+    <string name="btn_backing_up">Backing up…</string>
     <string name="btn_edit">Edit</string>
     <string name="btn_delete">Delete</string>
     <string name="btn_save">Save</string>
     <string name="btn_cancel">Cancel</string>
+    <string name="btn_settings">Settings</string>
+
+    <string name="section_name">BACKUP NAME</string>
+    <string name="section_source">SOURCE FOLDER</string>
+    <string name="section_dest">DESTINATION FOLDER</string>
+    <string name="section_options">BACKUP OPTIONS</string>
 
     <string name="choose_source">Choose source folder</string>
     <string name="choose_dest">Choose destination folder</string>
@@ -22,31 +29,34 @@
     <string name="opt_recursive">Include subfolders (recursive backup)</string>
     <string name="wifi_only">Wi-Fi only</string>
     <string name="charging_only">Only while charging</string>
-    <string name="opt_auto_daily">Automatic daily backup (timing managed by Android)</string>
+    <string name="opt_auto_daily">Automatic daily backup</string>
+    <string name="note_auto_daily_inexact">Runs approximately once per day. Android manages the exact execution time.</string>
 
-    <string name="label_notif_pref">Notifications</string>
+    <string name="label_notif_pref">NOTIFICATIONS</string>
     <string name="notif_pref_failures_only">Failures &amp; conflicts only (Default)</string>
     <string name="notif_pref_every_backup">Every backup</string>
     <string name="notif_pref_off">Off</string>
 
     <string name="badge_daily_on">Daily: ON</string>
     <string name="badge_daily_off">Daily: OFF</string>
-    <string name="badge_recursive_on">Recursive: ON</string>
-    <string name="badge_recursive_off">Recursive: OFF</string>
+    <string name="badge_recursive_on">Subfolders: ON</string>
+    <string name="badge_recursive_off">Subfolders: OFF</string>
+    <string name="badge_wifi_on">Wi-Fi: ON</string>
+    <string name="badge_wifi_off">Wi-Fi: OFF</string>
 
-    <string name="status_success">SUCCESS</string>
-    <string name="status_partial_conflicts">PARTIAL / CONFLICTS</string>
-    <string name="status_failed">FAILED</string>
-    <string name="status_never_run">NEVER RUN</string>
+    <string name="status_success">Backed up</string>
+    <string name="status_partial_conflicts">Needs attention</string>
+    <string name="status_failed">Backup failed</string>
+    <string name="status_never_run">Never run</string>
 
-    <string name="last_attempt_fmt">Last attempt: %1$s</string>
-    <string name="last_attempt_none">Last attempt: None</string>
-    <string name="last_success_fmt">Last success: %1$s</string>
-    <string name="last_success_none">Last success: None</string>
-    <string name="counts_fmt">Copied: %1$d · Skipped: %2$d · Failed: %3$d</string>
+    <string name="fmt_last_success">Last successful: %1$s</string>
+    <string name="fmt_last_attempt">Last attempt: %1$s · %2$s</string>
+    <string name="timestamp_never">Never</string>
 
-    <string name="empty_jobs_title">No backup jobs configured</string>
-    <string name="empty_jobs_desc">Tap "+ Add Backup Job" below to configure your first one-way folder backup.</string>
+    <string name="counts_fmt">%1$d copied · %2$d skipped · %3$d failed</string>
+
+    <string name="empty_jobs_title">No backups yet</string>
+    <string name="empty_jobs_desc">Choose a source folder and destination to create your first automatic backup.</string>
     <string name="banner_notif_disabled">⚠️ Backup notifications are disabled in Android settings.</string>
 
     <string name="notification_channel_name">Backup results</string>
@@ -55,6 +65,14 @@
     <string name="notif_conflict_body">Backup completed with %1$d conflict(s)/error(s)</string>
     <string name="notif_failed_body">Backup failed: %1$s</string>
     <string name="notif_failed_generic">Source or destination folder is no longer accessible</string>
+
+    <string name="menu_edit">Edit</string>
+    <string name="menu_enable_daily">Enable daily backup</string>
+    <string name="menu_disable_daily">Disable daily backup</string>
+    <string name="menu_delete">Delete</string>
+
+    <string name="dialog_delete_title">Delete "%1$s"?</string>
+    <string name="dialog_delete_msg">This will delete the backup configuration from SAFBackup. No source or destination files will be deleted.</string>
 
     <string name="error_enter_name">Please enter a name for this backup job.</string>
     <string name="error_select_both">Please choose both source and destination folders.</string>
@@ -66,4 +84,5 @@
     <string name="toast_job_deleted">Deleted backup job "%1$s"</string>
 
     <string name="imported_backup_name">Imported backup</string>
+    <string name="cd_job_options">Backup job options</string>
 </resources>

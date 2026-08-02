@@ -6,14 +6,21 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.view.View
 import android.widget.Toast
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import dev.safbackup.data.AppDatabase
@@ -29,30 +36,35 @@ class MainActivity : AppCompatActivity() {
     private lateinit var b: ActivityMainBinding
     private val db by lazy { AppDatabase.getInstance(this) }
     private lateinit var adapter: BackupJobAdapter
+    private val activeRunningJobs = mutableSetOf<String>()
 
     private val notifPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-            if (!isGranted) {
-                b.notifBannerText.visibility = View.VISIBLE
-            } else {
-                b.notifBannerText.visibility = View.GONE
-            }
+            updateNotificationBanner(!isGranted)
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         b = ActivityMainBinding.inflate(layoutInflater)
         setContentView(b.root)
 
+        // Apply WindowInsets for status bar (top) and navigation bar (bottom)
+        ViewCompat.setOnApplyWindowInsetsListener(b.root) { _, insets ->
+            val sysBars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            b.headerContainer.updatePadding(top = sysBars.top)
+            b.bottomBar.updatePadding(bottom = sysBars.bottom)
+            insets
+        }
+
         setupRecyclerView()
 
-        b.addJobButton.setOnClickListener {
-            startActivity(Intent(this, EditJobActivity::class.java))
-        }
-
-        b.backupAllButton.setOnClickListener {
-            enqueueBackupAll()
-        }
+        b.addJobButton.setOnClickListener { openAddJob() }
+        b.emptyAddButton.setOnClickListener { openAddJob() }
+        b.backupAllButton.setOnClickListener { enqueueBackupAll() }
+        b.notifSettingsButton.setOnClickListener { openAppNotificationSettings() }
 
         checkNotificationPermission()
 
@@ -64,6 +76,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun openAddJob() {
+        startActivity(Intent(this, EditJobActivity::class.java))
+    }
+
     private fun setupRecyclerView() {
         adapter = BackupJobAdapter(
             onRunNow = { job -> enqueueBackupJob(job) },
@@ -73,7 +89,8 @@ class MainActivity : AppCompatActivity() {
                 }
                 startActivity(intent)
             },
-            onDelete = { job -> deleteBackupJob(job) }
+            onDelete = { job -> confirmDeleteJob(job) },
+            onToggleDaily = { job -> toggleDailyBackup(job) }
         )
         b.recyclerView.layoutManager = LinearLayoutManager(this)
         b.recyclerView.adapter = adapter
@@ -82,6 +99,8 @@ class MainActivity : AppCompatActivity() {
     private fun observeJobs() {
         db.backupJobDao().getAllLiveData().observe(this) { jobs ->
             adapter.submitList(jobs)
+            adapter.setRunningJobs(activeRunningJobs)
+
             if (jobs.isEmpty()) {
                 b.emptyView.visibility = View.VISIBLE
                 b.recyclerView.visibility = View.GONE
@@ -95,12 +114,29 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun enqueueBackupJob(job: BackupJob) {
+        if (activeRunningJobs.contains(job.id)) return
+
         val req = OneTimeWorkRequestBuilder<BackupWorker>()
             .setConstraints(BackupWorker.buildConstraints(job.wifiOnly, job.chargingOnly))
             .setInputData(workDataOf(BackupWorker.KEY_JOB_ID to job.id))
             .build()
 
-        WorkManager.getInstance(this).enqueue(req)
+        activeRunningJobs.add(job.id)
+        adapter.setRunningJobs(activeRunningJobs)
+
+        val wm = WorkManager.getInstance(this)
+        wm.enqueue(req)
+
+        wm.getWorkInfoByIdLiveData(req.id).observe(this) { info ->
+            if (info == null) return@observe
+            if (info.state == WorkInfo.State.SUCCEEDED ||
+                info.state == WorkInfo.State.FAILED ||
+                info.state == WorkInfo.State.CANCELLED) {
+                activeRunningJobs.remove(job.id)
+                adapter.setRunningJobs(activeRunningJobs)
+            }
+        }
+
         Toast.makeText(this, getString(R.string.toast_job_queued, job.name), Toast.LENGTH_SHORT).show()
     }
 
@@ -110,28 +146,52 @@ class MainActivity : AppCompatActivity() {
             if (jobs.isEmpty()) return@launch
 
             for (job in jobs) {
-                val req = OneTimeWorkRequestBuilder<BackupWorker>()
-                    .setConstraints(BackupWorker.buildConstraints(job.wifiOnly, job.chargingOnly))
-                    .setInputData(workDataOf(BackupWorker.KEY_JOB_ID to job.id))
-                    .build()
-
-                WorkManager.getInstance(applicationContext).enqueue(req)
+                enqueueBackupJob(job)
             }
             Toast.makeText(applicationContext, R.string.toast_backup_all_queued, Toast.LENGTH_SHORT).show()
         }
     }
 
+    private fun toggleDailyBackup(job: BackupJob) {
+        lifecycleScope.launch {
+            val updated = job.copy(autoDaily = !job.autoDaily)
+            withContext(Dispatchers.IO) {
+                db.backupJobDao().update(updated)
+                val workName = BackupWorker.getWorkName(job.id)
+                if (updated.autoDaily) {
+                    val req = androidx.work.PeriodicWorkRequestBuilder<BackupWorker>(24, java.util.concurrent.TimeUnit.HOURS)
+                        .setConstraints(BackupWorker.buildConstraints(updated.wifiOnly, updated.chargingOnly))
+                        .setInputData(workDataOf(BackupWorker.KEY_JOB_ID to updated.id))
+                        .build()
+                    WorkManager.getInstance(applicationContext).enqueueUniquePeriodicWork(
+                        workName,
+                        androidx.work.ExistingPeriodicWorkPolicy.UPDATE,
+                        req
+                    )
+                } else {
+                    WorkManager.getInstance(applicationContext).cancelUniqueWork(workName)
+                }
+            }
+        }
+    }
+
+    private fun confirmDeleteJob(job: BackupJob) {
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.dialog_delete_title, job.name))
+            .setMessage(R.string.dialog_delete_msg)
+            .setPositiveButton(R.string.btn_delete) { _, _ -> deleteBackupJob(job) }
+            .setNegativeButton(R.string.btn_cancel, null)
+            .show()
+    }
+
     private fun deleteBackupJob(job: BackupJob) {
         lifecycleScope.launch {
             withContext(Dispatchers.IO) {
-                // Delete from DB
                 db.backupJobDao().delete(job)
 
-                // Cancel WorkManager schedule
                 WorkManager.getInstance(applicationContext)
                     .cancelUniqueWork(BackupWorker.getWorkName(job.id))
 
-                // Release SAF permissions ONLY if no other job uses them
                 val remainingJobs = db.backupJobDao().getAll()
                 releaseGrantIfUnused(job.sourceUri, isSource = true, remainingJobs)
                 releaseGrantIfUnused(job.destUri, isSource = false, remainingJobs)
@@ -169,8 +229,25 @@ class MainActivity : AppCompatActivity() {
             if (!granted) {
                 notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             } else {
-                b.notifBannerText.visibility = View.GONE
+                updateNotificationBanner(false)
             }
         }
+    }
+
+    private fun updateNotificationBanner(show: Boolean) {
+        b.notifBanner.visibility = if (show) View.VISIBLE else View.GONE
+    }
+
+    private fun openAppNotificationSettings() {
+        val intent = Intent().apply {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                action = Settings.ACTION_APP_NOTIFICATION_SETTINGS
+                putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+            } else {
+                action = Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+                data = Uri.fromParts("package", packageName, null)
+            }
+        }
+        startActivity(intent)
     }
 }
