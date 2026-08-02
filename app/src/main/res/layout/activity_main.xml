@@ -28,7 +28,7 @@
         <TextView
             android:text="@string/app_description"
             android:textSize="13sp"
-            android:textColor="?attr/colorOnSurfaceVariant"
+            android:textColor="@color/ui_on_surface_variant"
             android:layout_marginTop="2dp"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"/>
@@ -95,7 +95,7 @@
                 android:src="@android:drawable/ic_menu_save"
                 android:layout_width="64dp"
                 android:layout_height="64dp"
-                app:tint="?attr/colorOutline"
+                app:tint="@color/ui_outline"
                 android:contentDescription="@null"/>
 
             <TextView
@@ -110,7 +110,7 @@
             <TextView
                 android:text="@string/empty_jobs_desc"
                 android:textSize="14sp"
-                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textColor="@color/ui_on_surface_variant"
                 android:gravity="center"
                 android:layout_marginTop="8dp"
                 android:layout_width="wrap_content"

@@ -114,7 +114,7 @@
         <TextView
             android:text="@string/note_auto_daily_inexact"
             android:textSize="12sp"
-            android:textColor="?attr/colorOnSurfaceVariant"
+            android:textColor="@color/ui_on_surface_variant"
             android:layout_marginStart="32dp"
             android:layout_marginBottom="8dp"
             android:layout_width="match_parent"
